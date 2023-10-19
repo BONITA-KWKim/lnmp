@@ -1,0 +1,21 @@
+__pycache__/
+
+results/
+build/
+dist/
+
+testbed/
+test*/
+
+_notes/
+
+
+*.egg-info
+
+*.jpg
+*.png
+*.log.*
+*.log
+
+# ctags
+tags

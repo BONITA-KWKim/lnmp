@@ -1,0 +1,37 @@
+name: tumor-detection
+
+conda_env: env.yaml
+
+entry_points:
+  main:
+    parameters:
+      mode: {type: str, default: "train"}
+      cancer_type: {type: str, default: "breast"}
+      backbone: {type: str, default: "resnext50_32x4d"}
+      epoch: {type: int, default: 10}
+      lr: {type: float, default: 8e-4}
+      decay: {type: float, default: 3e-5}
+      bsize: {type: int, default: 16}
+      num_worker: {type: int, default: 4}
+      pretrained: {type: bool, default: True}
+      num_class: {type: int, default: 3}
+      train_dir: {type: str, default: "./dataset/train"}
+      infer_dir: {type: str, default: "./dataset/infer"}
+      save_dir: {type: str, default: "./results"}
+
+    command: |
+      python main.py \
+        --verbose debug \
+        --mode {mode} \
+        --cancer_type {cancer_type} \
+        --backbone {backbone} \
+        --epoch {epoch} \
+        --lr {lr} \
+        --decay {decay} \
+        --bsize {bsize} \
+        --num_worker {num_worker} \
+        --pretrained {pretrained} \
+        --num_class {num_class} \
+        --train_dir {train_dir} \
+        --infer_dir {infer_dir} \
+        --save_dir {save_dir} 
