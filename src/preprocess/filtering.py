@@ -108,6 +108,8 @@ def main():
 
 '''Usage
 python filtering.py --input /data/rnd1712/lnmp/test_filtering_dataset
+python filtering.py --input /data/rnd1712/dataset/thyroid/classification/rawdata
+
 '''
 if __name__=="__main__":
   main()

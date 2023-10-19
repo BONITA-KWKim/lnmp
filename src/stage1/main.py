@@ -1,19 +1,47 @@
 import os
 import argparse
+import logging
 from tqdm import tqdm
 
 import torch
 import torchvision.transforms as T
 from torch.utils.data import DataLoader, ConcatDataset
 
-from model import TDClassifier
+from models.model import TDClassifier
 from dataset import BreastPatchDataset
 
 import pickle
 import mlflow.pytorch
 # from mlflow.models import infer_signature
 
-from src.utils.logger import get_logger
+
+def get_logger(log_lv):
+  log_level = {
+    'fatal': logging.FATAL,
+    'error': logging.ERROR,
+    'warning': logging.WARNING,
+    'info': logging.INFO,
+    'debug': logging.DEBUG
+  }
+  # create logger
+  logger = logging.getLogger('LNMP logger')
+  logger.setLevel(log_level[log_lv])
+
+  # create console handler and set level to debug
+  ch = logging.StreamHandler()
+  ch.setLevel(log_level[log_lv])
+
+  # create formatter
+  formatter = logging.Formatter('[%(levelname)s]::(%(asctime)s) %(name)s - %(message)s')
+
+  # add formatter to ch
+  ch.setFormatter(formatter)
+
+  # add ch to logger
+  logger.addHandler(ch)
+
+  return logger
+
 
 '''options
 '''
@@ -151,8 +179,8 @@ def main():
   '''load dataset
   '''
   # t_dataloader, v_dataloader, _ = get_dataloader(conf_yaml)
-  t_dataloader, v_dataloader, tst_dataloader = get_dataloader(args.num_class, 
-                                                 args.train_dir, args.bsize)
+  t_dataloader, v_dataloader, tst_dataloader = get_dataloader(
+    logger, args.num_class, args.train_dir, args.bsize)
 
   with mlflow.start_run() as run:
     '''MLflow
@@ -262,7 +290,21 @@ mlflow run . -P mode=test -P cancer_type=breast -P backbone=resnext50_32x4d \
 if __name__=="__main__":
   main()
 
-'''20231017
+'''20231019-Thyroid (X)
+mlflow run . -P mode=train -P cancer_type=thyroid -P backbone=resnext50_32x4d \
+-P epoch=50 -P bsize=32 -P num_class=3 \
+-P train_dir=/data/rnd1712/dataset/thyroid/classification/v0-1 \
+-P infer_dir=/data/rnd1712/dataset/thyroid/classification/v0-1 \
+-P save_dir=./result-thyroid-v0_1-20231019N001
+
+mlflow run . -P mode=test -P cancer_type=thyroid -P backbone=resnext50_32x4d \
+-P epoch=50 -P bsize=32 -P num_class=3 \
+-P train_dir=/data/rnd1712/dataset/thyroid/classification/v0-1 \
+-P infer_dir=/data/rnd1712/dataset/thyroid/classification/v0-1 \
+-P save_dir=./result-thyroid-v0_1-20231019N001
+'''
+
+'''20231017 
 mlflow run . -P mode=train -P cancer_type=breast -P backbone=resnext50_32x4d \
 -P epoch=50 -P bsize=32 -P num_class=3 \
 -P train_dir=/data/rnd1712/dataset/breast/classification/breast-tumour-detection-v1_1_0 \
@@ -273,4 +315,15 @@ mlflow run . -P mode=test -P cancer_type=breast -P backbone=resnext50_32x4d \
 -P train_dir=/data/rnd1712/dataset/breast/classification/breast-tumour-detection-v1_1_0 \
 -P infer_dir=/data/rnd1712/dataset/breast/raw/breast-dataset-v2_0/patches \
 -P save_dir=./result-breast-v1_1-20231017N001
+'''
+
+
+'''Python Usage (O)
+cat logs/thyroid-v0_1-20231019N001.log
+tail logs/thyroid-v0_1-20231019N001.log
+CUDA_VISIBLE_DEVICES=2 nohup python main.py --mode=train --cancer_type=thyroid --backbone=resnext50_32x4d \
+--epoch=50 --bsize=32 --num_class=3 \
+--train_dir=/data/rnd1712/dataset/thyroid/classification/v0-1 \
+--infer_dir=/data/rnd1712/dataset/thyroid/classification/v0-1 \
+--save_dir=./result-thyroid-v0_1-20231019N001 &> logs/thyroid-v0_1-20231019N001.log &
 '''
