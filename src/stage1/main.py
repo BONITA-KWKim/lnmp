@@ -7,12 +7,15 @@ import torch
 import torchvision.transforms as T
 from torch.utils.data import DataLoader, ConcatDataset
 
-from models.model import TDClassifier
-from dataset import BreastPatchDataset
+# from models.model import TDClassifier
+from models.model import LitTDClassifier
+from dataset import PatchDataset
 
 import pickle
 import mlflow.pytorch
 # from mlflow.models import infer_signature
+
+import lightning.pytorch as pl
 
 
 def get_logger(log_lv):
@@ -97,7 +100,7 @@ def get_dataloader(logger, num_class, dataset_dir, bsize, num_workers=4):
     _list = []
     for label in range(num_class):
       path = os.path.join(dataset_dir, str(label), dataset_type)
-      _dataset = BreastPatchDataset(path, label, 
+      _dataset = PatchDataset(path, label, 
                                     num_classes=num_class, 
                                     one_hot=True)
       _list.append(_dataset)
@@ -115,6 +118,12 @@ def get_dataloader(logger, num_class, dataset_dir, bsize, num_workers=4):
     drop_last=False, num_workers=num_workers)
   
   return t_dataloader, v_dataloader, tst_dataloader
+
+
+# def train_e(logger, model, dataloader):
+#   # train the model (hint: here are some helpful Trainer arguments for rapid idea iteration)
+#   trainer = pl.Trainer(limit_train_batches=100, max_epochs=1)
+#   trainer.fit(model=model, train_dataloaders=dataloader)
 
 
 def train_epoch(logger, model, device, dataloader, loss_fn, optimizer):
@@ -185,145 +194,66 @@ def main():
   with mlflow.start_run() as run:
     '''MLflow
     '''
-    mlflow.set_tag("mlflow.runName", "Tumor Detection") # set run name
+    mlflow.set_tag("mlflow.runName", "Lightning Test") # set run name
 
     '''Model
     ''' 
-    torch.autograd.set_detect_anomaly(True)
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    logger.debug(f'device : {device}')
-    logger.debug(f'Current Cuda Device : {torch.cuda.current_device()}')
+    # torch.autograd.set_detect_anomaly(True)
+    # device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    # logger.debug(f'device : {device}')
+    # logger.debug(f'Current Cuda Device : {torch.cuda.current_device()}')
 
-    loss_func = torch.nn.MSELoss()
-    # loss_func = torch.nn.CrossEntropyLoss()
-    model = TDClassifier(args.num_class, args.backbone, args.pretrained)
-    model = model.to(device)
-
-    optimizer = torch.optim.Adam(
-      model.parameters(), lr=args.lr, weight_decay=args.decay
-    )
-    
     '''Training
     '''
-    saving_dir = args.save_dir
-    cancer_type = args.cancer_type
+    # saving_dir = args.save_dir
+    # cancer_type = args.cancer_type
 
-    if False == os.path.exists(saving_dir):
-      os.makedirs(saving_dir)
-
-    best_acc = 0.0
-    best_loss = 10000.0
-    train_loss = 10000.0
-    valid_loss = 10000.0
+    # if False == os.path.exists(saving_dir):
+      # os.makedirs(saving_dir)
+    
+    model = LitTDClassifier(args.num_class, args.backbone, args.pretrained)
+    
+    mlflow.pytorch.autolog()
     
     if "test"==args.mode:
       # Inference
-      with tqdm(tst_dataloader, unit='batch') as tepoch:
-        tepoch.set_description(f'[TEST]')
-
-        test_loss, test_correct = valid_epoch(logger, model, device, tepoch, 
-                                              loss_func)
-        test_loss = test_loss / len(tst_dataloader.sampler)
-        test_acc = test_correct / len(tst_dataloader.sampler) * 100
-        logger.info(f'TEST RESULT\r\n\tTest loss: {test_loss:.4f}\r\n\tTest accuracy: {test_acc:.4f}')
-        mlflow.log_metric(key="Test Accuracy", value=test_acc)
-        mlflow.log_metric(key="Test Loss", value=test_loss)
+      pass
     elif "train"==args.mode:
-      for epoch in range(args.epoch):
-        # Traing Epoch
-        with tqdm(t_dataloader, unit='batch') as tepoch:
-          tepoch.set_description(f'[TRAIN EPOCH {epoch + 1}]')
-
-          train_loss, train_correct = \
-            train_epoch(logger, model, device, tepoch, loss_func, optimizer)
-          train_loss = train_loss / len(t_dataloader.sampler) 
-          train_acc = train_correct / (len(t_dataloader.sampler)* 3) * 100
-          logger.info(f'TRAIN EPOCH: {epoch + 1}\r\n\tTrain loss: {train_loss:.4f}\r\n\tTrain accuracy: {train_acc:.4f}')
-
-        # Validation Epoch
-        with tqdm(v_dataloader, unit='batch') as vepoch:
-          vepoch.set_description(f'[VALIDATION EPOCH {epoch + 1}]')
-
-          valid_loss, valid_correct = \
-            valid_epoch(logger, model, device, vepoch, loss_func)
-          valid_loss = valid_loss / len(v_dataloader.sampler)
-          valid_acc = valid_correct / len(v_dataloader.sampler) * 100
-
-          logger.info(f'VALIDATION EPOCH: {epoch + 1}\r\n\tValidation loss: {valid_loss:.4f}\r\n\tValidation accuracy: {valid_acc:.4f}')
-
-        # save best model and info
-        if best_loss > valid_loss:
-          best_acc = max(best_acc, valid_acc)
-          best_loss = valid_loss
-          torch.save(
-            model.state_dict(),
-            f'{saving_dir}/{cancer_type}_small_best.pth'
-          )
-          mlflow.pytorch.log_model(
-            model, artifact_path="pytorch-model", pickle_module=pickle
-          )
-
-        '''MLflow
-        '''
-        mlflow.log_metric(key="Validation Loss", value=best_loss, step=epoch)
-        mlflow.log_metric(key="Validation Accuracy", value=best_acc, step=epoch)
-
-      logger.info(f'Best Accuracy: {best_acc}')
-      logger.info(f'Best Loss: {best_loss}')
+      # train the model
+      trainer = pl.Trainer(
+        devices=3, accelerator="auto", check_val_every_n_epoch=5,
+        limit_train_batches=args.bsize, max_epochs=args.epoch
+      )
+      trainer.fit(model=model, train_dataloaders=t_dataloader, 
+                  val_dataloaders=v_dataloader)
+      
+      # validate
+      # trainer.validate(model=model, dataloaders=v_dataloader)
 
   logger.info("END")
 
 
-'''Usage
-mlflow run . -P mode=train -P cancer_type=breast -P backbone=resnext50_32x4d \
--P epoch=5 -P bsize=32 -P num_class=3 \
--P train_dir=/data/rnd1712/dataset/breast/classification/breast-tumour-detection-v1_1_0 \
--P infer_dir=/data/rnd1712/dataset/breast/raw/breast-dataset-v2_0/patches \
--P save_dir=./result-breast-v1_1
-
-mlflow run . -P mode=test -P cancer_type=breast -P backbone=resnext50_32x4d \
--P epoch=5 -P bsize=32 -P num_class=3 \
--P train_dir=/data/rnd1712/dataset/breast/classification/breast-tumour-detection-v1_1_0 \
--P infer_dir=/data/rnd1712/dataset/breast/raw/breast-dataset-v2_0/patches \
--P save_dir=./result-breast-v1_1
-'''
 if __name__=="__main__":
   main()
 
-'''20231019-Thyroid (X)
+'''20231019-Thyroid
+[v0.1]
 mlflow run . -P mode=train -P cancer_type=thyroid -P backbone=resnext50_32x4d \
 -P epoch=50 -P bsize=32 -P num_class=3 \
 -P train_dir=/data/rnd1712/dataset/thyroid/classification/v0-1 \
 -P infer_dir=/data/rnd1712/dataset/thyroid/classification/v0-1 \
--P save_dir=./result-thyroid-v0_1-20231019N001
+-P save_dir=./result-thyroid-v0_1-20231020N001
 
 mlflow run . -P mode=test -P cancer_type=thyroid -P backbone=resnext50_32x4d \
 -P epoch=50 -P bsize=32 -P num_class=3 \
 -P train_dir=/data/rnd1712/dataset/thyroid/classification/v0-1 \
 -P infer_dir=/data/rnd1712/dataset/thyroid/classification/v0-1 \
 -P save_dir=./result-thyroid-v0_1-20231019N001
-'''
 
-'''20231017 
-mlflow run . -P mode=train -P cancer_type=breast -P backbone=resnext50_32x4d \
--P epoch=50 -P bsize=32 -P num_class=3 \
--P train_dir=/data/rnd1712/dataset/breast/classification/breast-tumour-detection-v1_1_0 \
--P infer_dir=/data/rnd1712/dataset/breast/raw/breast-dataset-v2_0/patches \
--P save_dir=./result-breast-v1_1-20231017N001
-mlflow run . -P mode=test -P cancer_type=breast -P backbone=resnext50_32x4d \
--P bsize=32 -P num_class=3 \
--P train_dir=/data/rnd1712/dataset/breast/classification/breast-tumour-detection-v1_1_0 \
--P infer_dir=/data/rnd1712/dataset/breast/raw/breast-dataset-v2_0/patches \
--P save_dir=./result-breast-v1_1-20231017N001
-'''
-
-
-'''Python Usage (O)
-cat logs/thyroid-v0_1-20231019N001.log
-tail logs/thyroid-v0_1-20231019N001.log
-CUDA_VISIBLE_DEVICES=2 nohup python main.py --mode=train --cancer_type=thyroid --backbone=resnext50_32x4d \
---epoch=50 --bsize=32 --num_class=3 \
---train_dir=/data/rnd1712/dataset/thyroid/classification/v0-1 \
---infer_dir=/data/rnd1712/dataset/thyroid/classification/v0-1 \
---save_dir=./result-thyroid-v0_1-20231019N001 &> logs/thyroid-v0_1-20231019N001.log &
+[v0.2]
+mlflow run . -P mode=train -P cancer_type=thyroid -P backbone=resnext50_32x4d \
+-P epoch=50 -P bsize=64 -P num_class=2 \
+-P train_dir=/data/rnd1712/dataset/thyroid/classification/v0-2 \
+-P infer_dir=/data/rnd1712/dataset/thyroid/classification/v0-2 \
+-P save_dir=./result-thyroid-v0_2-20231020N001
 '''

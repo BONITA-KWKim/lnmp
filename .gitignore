@@ -1,18 +1,21 @@
+# python build
 __pycache__/
-
-results/
-build/
+*.egg-info
 dist/
+build/
+
+# results directory
+results/
 result-*/
 
+# to test
 testbed/
 test*/
 
+# memoe
 _notes/
 
-
-*.egg-info
-
+# data and log
 *.jpg
 *.png
 *.log.*

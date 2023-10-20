@@ -5,9 +5,9 @@ import torchvision
 from torch.utils.data import Dataset
 
 
-class BreastPatchDataset(Dataset):
+class PatchDataset(Dataset):
   def __init__(self, path: str, label, num_classes, one_hot, transform=None):
-    super(BreastPatchDataset, self).__init__()
+    super(PatchDataset, self).__init__()
     self.image_list = []
     self.target = label
     self.transform = torchvision.transforms.Compose([
@@ -25,8 +25,8 @@ class BreastPatchDataset(Dataset):
     image = self.transform(image)
     if self.one_hot:
       return image, torch.nn.functional.one_hot(
-        torch.tensor(self.target),
-        self.num_classes).to(torch.float)
+        torch.tensor(self.target),self.num_classes
+      ).to(torch.float)
     else:
       return image, torch.tensor(self.target)
 
