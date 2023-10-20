@@ -83,7 +83,10 @@ class LitTDClassifier(pl.LightningModule):
     output = self.classifier(output)
     output = nn.functional.softmax(output, 1)
     loss = torch.nn.functional.mse_loss(output, target)
-    self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
+    self.log(
+      "train_loss", loss, on_step=True, on_epoch=True, prog_bar=True, 
+      logger=True, sync_dist=True
+    )
     return loss   
 
   def configure_optimizers(self):
@@ -99,10 +102,14 @@ class LitTDClassifier(pl.LightningModule):
     output = nn.functional.softmax(output, 1)
     loss = torch.nn.functional.mse_loss(output, target)
           
-    correct = (torch.argmax(output, -1) == torch.argmax(target, -1)).sum().item()
+    correct = torch.argmax(output, -1) == torch.argmax(target, -1).sum().item()
 
-    self.log("val_loss", loss, on_step=True, on_epoch=True, logger=True)
-    self.log("val_acc", correct/target.shape[0], on_step=True, on_epoch=True, logger=True)
+    self.log(
+      "val_loss", loss, logger=True, sync_dist=True
+    )
+    self.log(
+      "val_acc", correct/target.shape[0], logger=True, sync_dist=True
+    )
 
 
 if __name__=="__main__":

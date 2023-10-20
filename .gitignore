@@ -27,3 +27,6 @@ tags
 
 # mlflow
 mlruns/
+
+# lightning ai
+lighting-*/

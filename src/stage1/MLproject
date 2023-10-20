@@ -17,7 +17,6 @@ entry_points:
       num_class: {type: int, default: 3}
       train_dir: {type: str, default: "./dataset/train"}
       infer_dir: {type: str, default: "./dataset/infer"}
-      save_dir: {type: str, default: "./results"}
 
     command: |
       python main.py \
@@ -33,5 +32,4 @@ entry_points:
         --pretrained {pretrained} \
         --num_class {num_class} \
         --train_dir {train_dir} \
-        --infer_dir {infer_dir} \
-        --save_dir {save_dir} 
+        --infer_dir {infer_dir}
