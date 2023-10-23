@@ -9,11 +9,13 @@ from torch.utils.data import DataLoader, ConcatDataset
 
 # from models.model import TDClassifier
 from models.model import LitTDClassifier
+from models.model import LitTDDataModule
+from models.model import TDLightningCLI
 from dataset import PatchDataset
 
 import pickle
 import mlflow.pytorch
-# from mlflow.models import infer_signature
+from mlflow.models import infer_signature
 
 import lightning.pytorch as pl
 
@@ -48,13 +50,15 @@ def get_logger(log_lv):
 
 '''options
 '''
+'''
 def init_arg():
   parser = argparse.ArgumentParser(description='WSI patching process.')
 
   parser.add_argument('--verbose', default='info', choices=['info', 'debug'], 
                       type=str, help='The level of log')
   # common
-  parser.add_argument('--mode', default='train', choices=['train', 'test'], 
+  parser.add_argument('--mode', default='train', 
+                      choices=['train', 'test'], 
                       type=str, help='Train/Test')
   parser.add_argument('--cancer_type', default='breast', type=str,
                       help='Cancer type to detect tumor')
@@ -80,12 +84,12 @@ def init_arg():
                       help='Train dataset directory')
   parser.add_argument('--infer_dir', default='./dataset/infer', type=str,
                       help='Inference dataset directory')
-  parser.add_argument('--save_dir', default='./results', type=str,
-                      help='Directory to save results')
+  # parser.add_argument('--save_dir', default='./results', type=str,
+  #                     help='Directory to save results')
 
   args = parser.parse_args()
   return args
-
+'''
 
 def get_dataloader(logger, num_class, dataset_dir, bsize, num_workers=4):
   train_dataset = None
@@ -119,67 +123,7 @@ def get_dataloader(logger, num_class, dataset_dir, bsize, num_workers=4):
   
   return t_dataloader, v_dataloader, tst_dataloader
 
-
-# def train_e(logger, model, dataloader):
-#   # train the model (hint: here are some helpful Trainer arguments for rapid idea iteration)
-#   trainer = pl.Trainer(limit_train_batches=100, max_epochs=1)
-#   trainer.fit(model=model, train_dataloaders=dataloader)
-
-
-def train_epoch(logger, model, device, dataloader, loss_fn, optimizer):
-  t_loss, correct= .0, 0
-  model.train()
-
-  for images, labels in dataloader:
-    images, labels = images.to(device), labels.to(device)
-
-    train_transforms = T.RandomApply(
-      [
-        T.RandomRotation((-270, 270)),
-        T.GaussianBlur(kernel_size=(3, 3), sigma=(0.1, 5)),
-        T.RandomHorizontalFlip(p=0.7),
-        T.RandomVerticalFlip(p=0.7),
-        T.RandomGrayscale(),
-        T.RandomErasing()
-      ]
-    )
-
-    # to expand
-    for _ in range(3):
-      optimizer.zero_grad()
-      
-      output = model(train_transforms(images))
-      loss = loss_fn(output, labels)
-      loss.backward()
-      optimizer.step()
-
-      t_loss += loss.item() / images.size(0)
-      
-      pred_labels = torch.argmax(output, 1)
-      t_labels = torch.argmax(labels, -1)
-      correct += (pred_labels == t_labels).sum().item()
-  return t_loss, correct
-
-
-def valid_epoch(logger, model, device, dataloader, loss_fn):
-  v_loss, correct = .0, 0
-  model.eval()
-
-  with torch.no_grad():
-    for images, labels in dataloader:
-      images, labels = images.to(device), labels.to(device)
-
-      output = model(images)
-      # results
-      loss = loss_fn(output, labels)
-      v_loss += loss.item() / images.size(0)
-
-      pred_labels = torch.argmax(output, -1)
-      t_labels = torch.argmax(labels, -1)
-      correct += (pred_labels == t_labels).sum().item()
-  return v_loss, correct
-
-
+"""
 def main():
   args = init_arg()
   logger = get_logger(args.verbose)
@@ -190,6 +134,12 @@ def main():
   # t_dataloader, v_dataloader, _ = get_dataloader(conf_yaml)
   t_dataloader, v_dataloader, tst_dataloader = get_dataloader(
     logger, args.num_class, args.train_dir, args.bsize)
+
+  params = {"cancer_type": args.cancer_type, 
+            "backbone": args.backbone, 
+            "num_class": args.num_class}
+  # params' default values are saved with ModelSignature
+  signature = infer_signature(["input"], params=params)
 
   with mlflow.start_run() as run:
     '''MLflow
@@ -209,51 +159,110 @@ def main():
     # cancer_type = args.cancer_type
 
     # if False == os.path.exists(saving_dir):
-      # os.makedirs(saving_dir)
+    #   os.makedirs(saving_dir)
     
+    cli.trainer.fit(cli.model, datamodule=cli.datamodule)
+    cli.trainer.test(ckpt_path="best", datamodule=cli.datamodule)
+
     model = LitTDClassifier(args.num_class, args.backbone, args.pretrained)
     
     mlflow.pytorch.autolog()
     
+    trainer = pl.Trainer(
+      devices=3, accelerator="auto", check_val_every_n_epoch=5,
+      limit_train_batches=args.bsize, max_epochs=args.epoch
+    )
+
+    artifact_path = "td-model"
+    best_loss = 1e5
     if "test"==args.mode:
       # Inference
-      pass
+      # mlflow.pytorch.log_state_dict(model.state_dict(), artifact_path)
+      # state_dict_uri = mlflow.get_artifact_uri(artifact_path)
+      model = mlflow.pytorch.log_state_dict(
+        model.state_dict(), artifact_path
+      )
+      ot = trainer.test(model, dataloaders=tst_dataloader)
+      logger.debug(f"[TEST OUTPUT]\r\n{ot}")
     elif "train"==args.mode:
       # train the model
-      trainer = pl.Trainer(
-        devices=3, accelerator="auto", check_val_every_n_epoch=5,
-        limit_train_batches=args.bsize, max_epochs=args.epoch
-      )
       trainer.fit(model=model, train_dataloaders=t_dataloader, 
                   val_dataloaders=v_dataloader)
-      
-      # validate
-      # trainer.validate(model=model, dataloaders=v_dataloader)
-
+      callback_metrics = trainer.callback_metrics
+      if best_loss > callback_metrics["train_loss"]:
+        best_loss = callback_metrics["train_loss"]
+        mlflow.pytorch.log_model(model, artifact_path, signature=signature)
+    
   logger.info("END")
+"""
+
+from lightning.pytorch.callbacks import (
+    EarlyStopping,
+    LearningRateMonitor,
+    ModelCheckpoint,
+)
+def cli_main():
+  early_stopping = EarlyStopping(
+    monitor="val_loss",
+  )
+
+  if os.path.join(os.getcwd(), "results") is False:
+    os.makedirs(os.path.join(os.getcwd(), "results"))
+  checkpoint_callback = ModelCheckpoint(
+    dirpath=os.path.join(os.getcwd(), "results"), save_top_k=1, verbose=True, monitor="val_loss", mode="min"
+  )
+
+  lr_logger = LearningRateMonitor()
+  cli = TDLightningCLI(
+    LitTDClassifier,
+    LitTDDataModule,
+    run=False,
+    save_config_callback=None,
+    trainer_defaults={"callbacks": [early_stopping, checkpoint_callback, lr_logger]},
+  )
+
+  if cli.trainer.global_rank == 0:
+      mlflow.pytorch.autolog()
+  # cli.model=torch.compile(cli.model)
+  cli.trainer.fit(cli.model, datamodule=cli.datamodule)
+  cli.trainer.test(ckpt_path="best", datamodule=cli.datamodule)
 
 
 if __name__=="__main__":
-  main()
+  # main()
+  cli_main()
 
+# 3545833472
+# find . -type d | xargs -n1 -I{} rmdir {}
 '''20231019-Thyroid
 [v0.1]
 mlflow run . -P mode=train -P cancer_type=thyroid -P backbone=resnext50_32x4d \
 -P epoch=50 -P bsize=32 -P num_class=3 \
 -P train_dir=/data/rnd1712/dataset/thyroid/classification/v0-1 \
--P infer_dir=/data/rnd1712/dataset/thyroid/classification/v0-1 \
--P save_dir=./result-thyroid-v0_1-20231020N001
+-P infer_dir=/data/rnd1712/dataset/thyroid/classification/v0-1 
 
 mlflow run . -P mode=test -P cancer_type=thyroid -P backbone=resnext50_32x4d \
 -P epoch=50 -P bsize=32 -P num_class=3 \
 -P train_dir=/data/rnd1712/dataset/thyroid/classification/v0-1 \
--P infer_dir=/data/rnd1712/dataset/thyroid/classification/v0-1 \
--P save_dir=./result-thyroid-v0_1-20231019N001
+-P infer_dir=/data/rnd1712/dataset/thyroid/classification/v0-1 
 
 [v0.2]
-mlflow run . -P mode=train -P cancer_type=thyroid -P backbone=resnext50_32x4d \
--P epoch=50 -P bsize=64 -P num_class=2 \
+mlflow run . -P backbone=resnext50_32x4d \
+-P max_epochs=100 -P batch_size=128 -P num_class=2 \
+-P dataset_dir=/data/rnd1712/dataset/thyroid/classification/v0-2
+
+mlflow run . -P mode=test -P cancer_type=thyroid -P backbone=resnext50_32x4d \
+-P bsize=64 -P num_class=2 \
 -P train_dir=/data/rnd1712/dataset/thyroid/classification/v0-2 \
--P infer_dir=/data/rnd1712/dataset/thyroid/classification/v0-2 \
--P save_dir=./result-thyroid-v0_2-20231020N001
+-P infer_dir=/data/rnd1712/dataset/thyroid/classification/v0-2
+
+mlflow run . -P backbone=resnext50_32x4d \
+-P max_epochs=5 -P batch_size=128 -P num_class=2 \
+-P dataset_dir=/data/rnd1712/dataset/thyroid/classification/v0-2
+
+
+
 '''
+
+
+# 34423 (mlflow ui)

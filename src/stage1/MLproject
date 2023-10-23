@@ -5,31 +5,30 @@ conda_env: env.yaml
 entry_points:
   main:
     parameters:
-      mode: {type: str, default: "train"}
-      cancer_type: {type: str, default: "breast"}
+      devices: {type: int, default: "auto"}
+      strategy: {type str, default: "auto"}
+      accelerator: {type str, default: "auto"}
       backbone: {type: str, default: "resnext50_32x4d"}
-      epoch: {type: int, default: 10}
+      max_epochs: {type: int, default: 2}
       lr: {type: float, default: 8e-4}
-      decay: {type: float, default: 3e-5}
-      bsize: {type: int, default: 16}
+      weight_decay: {type: float, default: 3e-5}
+      batch_size: {type: int, default: 16}
       num_worker: {type: int, default: 4}
       pretrained: {type: bool, default: True}
       num_class: {type: int, default: 3}
-      train_dir: {type: str, default: "./dataset/train"}
-      infer_dir: {type: str, default: "./dataset/infer"}
+      dataset_dir: {type: str, default: "./dataset"}
 
     command: |
       python main.py \
-        --verbose debug \
-        --mode {mode} \
-        --cancer_type {cancer_type} \
-        --backbone {backbone} \
-        --epoch {epoch} \
-        --lr {lr} \
-        --decay {decay} \
-        --bsize {bsize} \
-        --num_worker {num_worker} \
-        --pretrained {pretrained} \
-        --num_class {num_class} \
-        --train_dir {train_dir} \
-        --infer_dir {infer_dir}
+        --trainer.max_epochs {max_epochs} \
+        --trainer.devices {devices} \
+        --trainer.strategy {strategy} \
+        --trainer.accelerator {accelerator} \
+        --model.backbone {backbone} \
+        --model.lr {lr} \
+        --model.weight_decay {weight_decay} \
+        --data.batch_size {batch_size} \
+        --data.num_worker {num_worker} \
+        --model.pretrained {pretrained} \
+        --data.num_class {num_class} \
+        --data.dataset_dir {dataset_dir}
