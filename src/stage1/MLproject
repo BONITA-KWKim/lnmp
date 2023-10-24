@@ -5,11 +5,11 @@ conda_env: env.yaml
 entry_points:
   main:
     parameters:
-      devices: {type: int, default: "auto"}
-      strategy: {type str, default: "auto"}
-      accelerator: {type str, default: "auto"}
+      max_epochs: {type: int, default: 5}
+      devices: {type: str, default: "auto"}
+      strategy: {type: str, default: "auto"}
+      accelerator: {type: str, default: "auto"}
       backbone: {type: str, default: "resnext50_32x4d"}
-      max_epochs: {type: int, default: 2}
       lr: {type: float, default: 8e-4}
       weight_decay: {type: float, default: 3e-5}
       batch_size: {type: int, default: 16}
