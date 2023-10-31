@@ -155,18 +155,10 @@ class WSIMap:
     return self.openslide.read_region(loc, level, size)
 
 
-  def get_total_image_by_level(self, seg_level:int=0):
-    mpp = self.openslide.properties['aperio.MPP']
-    mpp = math.floor(float(mpp)*10)
-
-    if mpp == 2:
-      seg_level = 1
-    elif mpp == 5:
-      seg_level = 0
-    else:
-      seg_level = 0
-
-    return self.openslide.read_region((0,0), seg_level, (self.width, self.height))
+  # def get_total_image_by_level(self, seg_level:int=0):
+  def get_total_image_by_level(self):
+    region = self.openslide.read_region((0,0), 0, (self.width, self.height))
+    return region
 
 
   def test(self):

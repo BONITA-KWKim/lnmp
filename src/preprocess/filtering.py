@@ -51,13 +51,23 @@ def filtering(logger, image):
   if maker_count > 10000:
     filtered = True
 
-  b = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 15, 5)
+
+  whitespace_count = np.sum(np.array(gray) >= 230)
+  logger.debug(f'white pixel count: {whitespace_count}')
+  
+  if whitespace_count > 78643:
+    filtered = True
+
+  """disabled for thyroid
+  b = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
+                            cv2.THRESH_BINARY_INV, 15, 5)
   c = np.count_nonzero(b)
   logger.debug(f"c count: {c}")
   ratio = (c/(gray.shape[0] * gray.shape[1]))
   logger.debug(f"ratio: {ratio}")
   if ratio < .32:
     filtered = True
+  """
 
   return filtered
 
@@ -105,11 +115,13 @@ def main():
     _filtering_images(files, save_root)
         
   logger.info('END')
-
 '''Usage
 python filtering.py --input /data/rnd1712/lnmp/test_filtering_dataset
 python filtering.py --input /data/rnd1712/dataset/thyroid/classification/rawdata
 
+python filtering.py --debug debug --input /data/rnd1712/dataset/thyroid/test_patches
+
+python filtering.py --input /data/rnd1712/dataset/thyroid/classification/rawdata
 '''
 if __name__=="__main__":
   main()
